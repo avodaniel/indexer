@@ -13,4 +13,5 @@
 ### On all OSes
 
     # pip3 install pyzmq --install-option="--zmq=/usr/lib"
-    # pip3 install python-bitcoinlib    
+    # pip3 install python-bitcoinlib
+    # pip3 install leveldb

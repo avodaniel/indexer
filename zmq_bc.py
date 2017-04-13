@@ -31,10 +31,25 @@ address = '172.16.11.17'
 port = 1024
 
 class ZMQHandler():
+    class Tx:
+        def __init__(self):
+            self.hash = None
+            self.body = None
+
+
+        def is_everything_set(self):
+            return self.hash is not None and self.body is not None
+
+        def __str__(self):
+            return f'Tx:{self.hash}: {self.body}'
+
+
     def __init__(self):
         global proto
         global address
         global port
+
+        self._txs = dict()
 
         self.loop = zmq.asyncio.install()
         self.zmqContext = zmq.asyncio.Context()
@@ -45,6 +60,13 @@ class ZMQHandler():
         self.zmqSubSocket.setsockopt_string(zmq.SUBSCRIBE, "rawblock")
         self.zmqSubSocket.setsockopt_string(zmq.SUBSCRIBE, "rawtx")
         self.zmqSubSocket.connect(f"{proto}://{address}:{port}")
+
+    def _process_tr(self, tx_id):
+        tx = self._txs[tx_id]
+        if not tx.is_everything_set():
+            return
+        logger.debug('Tx received: %s', tx)
+        del self._txs[tx_id]
 
     async def handle(self) :
         msg = await self.zmqSubSocket.recv_multipart()
@@ -58,12 +80,14 @@ class ZMQHandler():
             logger.debug('HASH BLOCK (%s) -> %s', sequence, binascii.hexlify(body))
         elif topic == b"hashtx":
             logger.debug('HASH TX (%s) -> %s', sequence, binascii.hexlify(body))
+            self._txs.setdefault(sequence, ZMQHandler.Tx()).hash = body
+            self._process_tr(sequence)
         elif topic == b"rawblock":
             logger.debug('RAW BLOCK HEADER (%s) -> %s', sequence, binascii.hexlify(body[:80]))
         elif topic == b"rawtx":
             logger.debug('RAW TX (%s) -> %s', sequence, binascii.hexlify(body))
-            tx = msg_tx.msg_deser(io.BytesIO(body))
-            logger.debug('Parsed tx: %r', tx)
+            self._txs.setdefault(sequence, ZMQHandler.Tx()).body = body
+            self._process_tr(sequence)
         # schedule ourselves to receive the next message
         asyncio.ensure_future(self.handle())
 
