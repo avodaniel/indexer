@@ -22,13 +22,9 @@ import sys
 import logging
 
 import io
-from bitcoin.messages import msg_tx
+from bitcoinrpc.authproxy import AuthServiceProxy
 
 logger = logging.getLogger('indexer.zmq');
-
-proto = 'tcp'
-address = '172.16.11.17'
-port = 1024
 
 class ZMQHandler():
     class Tx:
@@ -44,10 +40,10 @@ class ZMQHandler():
             return f'Tx:{self.hash}: {self.body}'
 
 
-    def __init__(self):
-        global proto
-        global address
-        global port
+    def __init__(self, zmq_endpoint, rpc_addr):
+        self.zmq_endpoint = zmq_endpoint
+        self.rpc_addr = rpc_addr
+        self.rpc = AuthServiceProxy(self.rpc_addr)
 
         self._txs = dict()
 
@@ -59,16 +55,17 @@ class ZMQHandler():
         self.zmqSubSocket.setsockopt_string(zmq.SUBSCRIBE, "hashtx")
         self.zmqSubSocket.setsockopt_string(zmq.SUBSCRIBE, "rawblock")
         self.zmqSubSocket.setsockopt_string(zmq.SUBSCRIBE, "rawtx")
-        self.zmqSubSocket.connect(f"{proto}://{address}:{port}")
+        self.zmqSubSocket.connect(self.zmq_endpoint)
 
     def _process_tr(self, tx_id):
         tx = self._txs[tx_id]
         if not tx.is_everything_set():
             return
-        logger.debug('Tx received: %s', tx)
+        transaction = self.rpc.getrawtransaction(tx.hash.decode('ascii'), 1)
+        logger.debug('Tx received: %s, transaction: %s', tx, transaction)
         del self._txs[tx_id]
 
-    async def handle(self) :
+    async def handle(self):
         msg = await self.zmqSubSocket.recv_multipart()
         topic = msg[0]
         body = msg[1]
@@ -80,7 +77,7 @@ class ZMQHandler():
             logger.debug('HASH BLOCK (%s) -> %s', sequence, binascii.hexlify(body))
         elif topic == b"hashtx":
             logger.debug('HASH TX (%s) -> %s', sequence, binascii.hexlify(body))
-            self._txs.setdefault(sequence, ZMQHandler.Tx()).hash = body
+            self._txs.setdefault(sequence, ZMQHandler.Tx()).hash = binascii.hexlify(body)
             self._process_tr(sequence)
         elif topic == b"rawblock":
             logger.debug('RAW BLOCK HEADER (%s) -> %s', sequence, binascii.hexlify(body[:80]))
@@ -109,5 +106,5 @@ logger.addHandler(ch)
 
 logger.info('Starting ZMQ listener...')
 
-daemon = ZMQHandler()
+daemon = ZMQHandler(sys.argv[1], sys.argv[2])
 daemon.start()
