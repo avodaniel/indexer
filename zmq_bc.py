@@ -22,7 +22,7 @@ import sys
 import logging
 
 import io
-from bitcoinrpc.authproxy import AuthServiceProxy
+from bitcoinrpc.asyncio.authproxy import AuthServiceProxy
 
 logger = logging.getLogger('indexer.zmq');
 
@@ -57,11 +57,11 @@ class ZMQHandler():
         self.zmqSubSocket.setsockopt_string(zmq.SUBSCRIBE, "rawtx")
         self.zmqSubSocket.connect(self.zmq_endpoint)
 
-    def _process_tr(self, tx_id):
+    async def _process_tr(self, tx_id):
         tx = self._txs[tx_id]
         if not tx.is_everything_set():
             return
-        transaction = self.rpc.getrawtransaction(tx.hash.decode('ascii'), 1)
+        transaction = await self.rpc.getrawtransaction(tx.hash.decode('ascii'), 1)
         logger.debug('Tx received: %s, transaction: %s', tx, transaction)
         del self._txs[tx_id]
 
@@ -78,13 +78,13 @@ class ZMQHandler():
         elif topic == b"hashtx":
             logger.debug('HASH TX (%s) -> %s', sequence, binascii.hexlify(body))
             self._txs.setdefault(sequence, ZMQHandler.Tx()).hash = binascii.hexlify(body)
-            self._process_tr(sequence)
+            await self._process_tr(sequence)
         elif topic == b"rawblock":
             logger.debug('RAW BLOCK HEADER (%s) -> %s', sequence, binascii.hexlify(body[:80]))
         elif topic == b"rawtx":
             logger.debug('RAW TX (%s) -> %s', sequence, binascii.hexlify(body))
             self._txs.setdefault(sequence, ZMQHandler.Tx()).body = body
-            self._process_tr(sequence)
+            await self._process_tr(sequence)
         # schedule ourselves to receive the next message
         asyncio.ensure_future(self.handle())
 
