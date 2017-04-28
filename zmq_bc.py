@@ -22,7 +22,8 @@ import sys
 import logging
 
 import io
-from bitcoinrpc.asyncio.authproxy import AuthServiceProxy
+import traceback
+from bitcoinrpc.asyncio.authproxy import AuthServiceProxy, JSONRPCException
 
 logger = logging.getLogger('indexer.zmq');
 
@@ -47,7 +48,6 @@ class ZMQHandler():
 
         self._txs = dict()
 
-        self.loop = zmq.asyncio.install()
         self.zmqContext = zmq.asyncio.Context()
 
         self.zmqSubSocket = self.zmqContext.socket(zmq.SUB)
@@ -61,8 +61,24 @@ class ZMQHandler():
         tx = self._txs[tx_id]
         if not tx.is_everything_set():
             return
-        transaction = await self.rpc.getrawtransaction(tx.hash.decode('ascii'), 1)
-        logger.debug('Tx received: %s, transaction: %s', tx, transaction)
+
+        transaction = None
+        if transaction is None:
+            try:
+                transaction = await self.rpc.getrawtransaction(tx.hash, 1)
+            except JSONRPCException:
+                traceback.print_exc()
+                pass
+        if transaction is None:
+            try:
+                transaction = await self.rpc.gettransaction(tx.hash)
+            except JSONRPCException:
+                traceback.print_exc()
+                pass
+        if transaction is None:
+            logger.error('Cannot decode transaction: %s', tx)
+        else:
+            logger.debug('Tx received: %s, transaction: %s', tx, transaction)
         del self._txs[tx_id]
 
     async def handle(self):
@@ -77,7 +93,7 @@ class ZMQHandler():
             logger.debug('HASH BLOCK (%s) -> %s', sequence, binascii.hexlify(body))
         elif topic == b"hashtx":
             logger.debug('HASH TX (%s) -> %s', sequence, binascii.hexlify(body))
-            self._txs.setdefault(sequence, ZMQHandler.Tx()).hash = binascii.hexlify(body)
+            self._txs.setdefault(sequence, ZMQHandler.Tx()).hash = binascii.hexlify(body).decode('ascii')
             await self._process_tr(sequence)
         elif topic == b"rawblock":
             logger.debug('RAW BLOCK HEADER (%s) -> %s', sequence, binascii.hexlify(body[:80]))
@@ -85,17 +101,38 @@ class ZMQHandler():
             logger.debug('RAW TX (%s) -> %s', sequence, binascii.hexlify(body))
             self._txs.setdefault(sequence, ZMQHandler.Tx()).body = body
             await self._process_tr(sequence)
-        # schedule ourselves to receive the next message
-        asyncio.ensure_future(self.handle())
 
-    def start(self):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.zmqContext.destroy()
+
+
+class Daemon:
+    def __init__(self):
+        self.loop = zmq.asyncio.install()
+
+    async def handle(self):
+        await self.handler.handle()
+
+    def start(self, handler):
+        async def handle():
+            await handler.handle()
+            asyncio.ensure_future(handle())
         self.loop.add_signal_handler(signal.SIGINT, self.stop)
-        self.loop.create_task(self.handle())
+        self.loop.create_task(handle())
         self.loop.run_forever()
 
     def stop(self):
         self.loop.stop()
-        self.zmqContext.destroy()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
 
 logger.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
@@ -106,5 +143,5 @@ logger.addHandler(ch)
 
 logger.info('Starting ZMQ listener...')
 
-daemon = ZMQHandler(sys.argv[1], sys.argv[2])
-daemon.start()
+with Daemon() as daemon, ZMQHandler(sys.argv[1], sys.argv[2]) as zmq_handler:
+    daemon.start(zmq_handler)
