@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package indexer;
+
+message GetChainInfo {
+	uint64 height = 1;
+	string hash = 2;
+}
+
+message GetTx {
+	uint64 txid = 1;
+}
+
+message SubscribeAddr {
+	repeated string addr = 1;
+}
+
+message Request {
+	oneof request {
+		GetChainInfo get_chain_info = 1;
+		GetTx get_tx = 2;
+		SubscribeAddr subscribe_addr = 3;
+	}
+}
+
+message TxInfo {
+	uint64 txid = 1;
+	string addr = 2;
+
+	enum Action {
+		ADDED = 0;
+		REMOVED = 1;
+		SYNCED = 2;
+	}
+
+	Action action = 3;
+}

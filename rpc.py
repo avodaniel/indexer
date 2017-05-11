@@ -4,6 +4,8 @@ import websockets
 import config
 import logging
 
+import gen.rpc_pb2 as rpc_messages
+
 logger = logging.getLogger('indexer.rpc')
 
 
@@ -11,10 +13,20 @@ async def _handler(wssp, req_uri):
     import datetime
     import random
     while True:
-        now = datetime.datetime.utcnow().isoformat() + 'Z'
-        await wssp.send(now)
-        await asyncio.sleep(random.random() * 3)
-
+        request = rpc_messages.Request()
+        bytes = await wssp.recv()
+        request.ParseFromString(bytes)
+        rtype = request.whichoneof('type')
+        if rtype is None:
+            pass
+        elif (rtype == 'get_chain_info'):
+            pass
+        elif (rtype == 'get_tx'):
+            pass
+        elif (rtype == 'subscribe_addr'):
+            pass
+        else:
+            pass
 
 async def init_server():
     server = await websockets.server.serve(_handler, config.server().host, config.server().port)
