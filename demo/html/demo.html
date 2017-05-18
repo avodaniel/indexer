@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+    </script>
+    <head>
+        <title>WebSocket demo</title>
+    </head>
+    <body>
+        <script src="../../gen/js/rpc.js"></script>
+	<script>
+            window.onload = function() {
+                var get_chain_info = proto.indexer.GetChainInfo();
+                var request = proto.indexer.Request();
+                get_chain_info.setHeight(25000);
+                get_chain_info.setHash('a65bc');
+                request.set_get_chain_info(get_chain_info);
+                var bytes = request.serializeBinary();
+
+                var ws = new WebSocket("ws://10.11.12.101:1024/");
+                ws.onopen = function(event) {
+                    ws.send(bytes);
+                }
+	    }
+        </script>
+    </body>
+</html>
+

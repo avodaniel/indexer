@@ -4,7 +4,7 @@ import websockets
 import config
 import logging
 
-import gen.rpc_pb2 as rpc_messages
+import gen.py.rpc_pb2 as rpc_messages
 
 logger = logging.getLogger('indexer.rpc')
 
@@ -12,11 +12,13 @@ logger = logging.getLogger('indexer.rpc')
 async def _handler(wssp, req_uri):
     import datetime
     import random
+    logger.debug('Request uri: %s', req_uri)
     while True:
         request = rpc_messages.Request()
         bytes = await wssp.recv()
         request.ParseFromString(bytes)
-        rtype = request.whichoneof('type')
+        logger.debug('Received: %s', request)
+        rtype = request.WhichOneof('type')
         if rtype is None:
             pass
         elif (rtype == 'get_chain_info'):

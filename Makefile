@@ -5,7 +5,7 @@ protobuf_backend: gen/py/rpc_pb2.py
 
 gen/py/%_pb2.py: %.proto
 	mkdir -p gen/py
-	protoc --python_out=gen $<
+	protoc --python_out=gen/py $<
 
 
 protobuf_frontend: gen/js/rpc.js
