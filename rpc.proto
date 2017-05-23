@@ -2,24 +2,34 @@ syntax = "proto3";
 
 package indexer;
 
-message GetChainInfo {
-	uint64 height = 1;
-	string hash = 2;
-}
-
-message GetTx {
-	uint64 txid = 1;
-}
-
-message SubscribeAddr {
-	repeated string addr = 1;
-}
-
 message Request {
+	message GetChainInfo {
+		uint64 height = 1;
+		string hash = 2;
+	}
+
+	message GetTx {
+		uint64 txid = 1;
+	}
+
+	message SubscribeAddr {
+		repeated string addr = 1;
+	}
+
 	oneof request {
 		GetChainInfo get_chain_info = 1;
 		GetTx get_tx = 2;
 		SubscribeAddr subscribe_addr = 3;
+	}
+}
+
+message Response {
+	message Error {
+		string msg = 1;
+	}
+
+	oneof response {
+		Error error = 1;
 	}
 }
 

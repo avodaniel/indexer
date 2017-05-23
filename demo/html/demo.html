@@ -5,20 +5,47 @@
         <title>WebSocket demo</title>
     </head>
     <body>
-        <script src="../../gen/js/rpc.js"></script>
+        <script src="https://cdn.rawgit.com/dcodeIO/protobuf.js/6.7.3/dist/protobuf.js"></script>
 	<script>
+	    var ws = new WebSocket("ws://10.11.12.101:1024/");
+	    ws.binaryType = 'arraybuffer';
+	    ws.onerror = function(event) {
+		console.log("Error!");
+	    }
+	    ws.onclose = function(event) {
+		console.log("Close!");
+	    }
             window.onload = function() {
-                var get_chain_info = proto.indexer.GetChainInfo();
-                var request = proto.indexer.Request();
-                get_chain_info.setHeight(25000);
-                get_chain_info.setHash('a65bc');
-                request.set_get_chain_info(get_chain_info);
-                var bytes = request.serializeBinary();
+                protobuf.load("../../rpc.proto", function(err, root) {
+                    if (err)
+                        throw err;
 
-                var ws = new WebSocket("ws://10.11.12.101:1024/");
-                ws.onopen = function(event) {
-                    ws.send(bytes);
-                }
+                    var GetChainInfo = root.lookupType("indexer.Request.GetChainInfo");
+                    var Request = root.lookupType("indexer.Request");
+                    var Response = root.lookupType("indexer.Response");
+
+                    var chain_info = GetChainInfo.create({
+                        height:25000,
+                        hash:"a45d65"
+                    });
+                    var request = Request.create({
+                        getChainInfo:{
+                            height:1234,
+                            hash:"CCCC"
+                        }
+                    });
+
+                    console.log("Hello: ", JSON.stringify(request), "; get_chain_info: ", JSON.stringify(chain_info));
+                    ws.onopen = function(event) {
+                        ws.send(Request.encode(request).finish());
+                    }
+                    ws.onmessage = function(event) {
+                        console.log("Response data: ", event.data, "; ", JSON.stringify(typeof event.data));
+                        ws.close();
+                        var response = Response.decode(new Uint8Array(event.data));
+                        console.log("Response: ", JSON.stringify(response));
+                    }
+                });
 	    }
         </script>
     </body>
